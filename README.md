@@ -8,7 +8,31 @@
 htcache -a 0.0.0.0 -p 9000
 ```
 
-## 
+## Usage
+
+### Write data to the cache
+
+```
+PUT /<cache-key>
+Content-Type: <content-type>
+X-TTL: <ttl>
+```
+
+```sh
+curl -XPUT http://localhost:3030/test --header "Content-Type: text/plain" --header "X-TTL: 120" --data-binary="hello world"
+```
+
+### Read data from the cache
+
+```
+GET /<cache-key>
+```
+
+```sh
+curl -XGET http://localhost:3030/test
+```
+
+## About this demo
 
 This demo application uses the following techniques and libraries:
 
