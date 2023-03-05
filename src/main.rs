@@ -1,4 +1,4 @@
-use service::CacheService;
+use service::Cache;
 
 use clap::{value_parser, Arg, ArgMatches, Command};
 
@@ -24,7 +24,7 @@ macro_rules! either {
     }};
 }
 
-type CacheServiceTS = Arc<Mutex<CacheService>>;
+type CacheTS = Arc<Mutex<Cache>>;
 
 // TODO: remove hash function and use hasher for hashmap
 // TODO: create a persister tool for the hashmap to write it to disk
@@ -32,7 +32,7 @@ type CacheServiceTS = Arc<Mutex<CacheService>>;
 #[tokio::main]
 async fn main() {
     let options = get_cli_options();
-    let cache = Arc::new(Mutex::new(CacheService::new(128)));
+    let cache = Arc::new(Mutex::new(Cache::new(128)));
 
     either!(
         options.get_flag("ecs-logging"),
@@ -82,7 +82,7 @@ fn get_cli_options() -> ArgMatches {
         .get_matches()
 }
 
-async fn cache_gc(secs: u64, cache: CacheServiceTS) -> JoinHandle<()> {
+async fn cache_gc(secs: u64, cache: CacheTS) -> JoinHandle<()> {
     tokio::task::spawn(async move {
         let mut interval = time::interval(Duration::from_secs(secs));
 
@@ -113,7 +113,7 @@ mod service {
     impl CacheRecord {
         fn is_expired(&self) -> bool {
             self.expires.map_or(false, |ttl| {
-                (self.created + Duration::seconds(ttl as i64)) < Utc::now()
+                (self.created + Duration::seconds(i64::from(ttl))) < Utc::now()
             })
         }
 
@@ -130,12 +130,12 @@ mod service {
         }
     }
 
-    pub struct CacheService {
+    pub struct Cache {
         storage: HashMap<u64, CacheRecord>,
         capacity: usize,
     }
 
-    impl CacheService {
+    impl Cache {
         pub fn new(capacity: usize) -> Self {
             Self {
                 storage: HashMap::with_capacity(capacity),
@@ -183,20 +183,20 @@ mod service {
 //
 mod filters {
     use super::handlers;
-    use crate::CacheServiceTS;
+    use crate::CacheTS;
     use bytes::Bytes;
     use warp::Filter;
 
     pub fn cache_api(
-        cache: CacheServiceTS,
+        cache: CacheTS,
     ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
         cache_get(cache.clone())
-            .or(cache_put(cache.clone()))
+            .or(cache_put(cache))
             .with(warp::log("api"))
     }
 
     pub fn cache_get(
-        cache: CacheServiceTS,
+        cache: CacheTS,
     ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
         warp::path!(String)
             .and(warp::get())
@@ -205,7 +205,7 @@ mod filters {
     }
 
     pub fn cache_put(
-        cache: CacheServiceTS,
+        cache: CacheTS,
     ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
         warp::path!(String)
             .and(warp::put())
@@ -224,13 +224,13 @@ mod filters {
 // Build the request handlers
 //
 mod handlers {
-    use crate::CacheServiceTS;
+    use crate::CacheTS;
     use std::convert::Infallible;
     use warp::http::StatusCode;
 
     pub async fn cache_get(
         name: String,
-        cache: CacheServiceTS,
+        cache: CacheTS,
     ) -> Result<impl warp::Reply, Infallible> {
         if let Some(record) = cache.lock().await.get(name.as_str()) {
             if let Some(content) = record.get() {
@@ -259,7 +259,7 @@ mod handlers {
         body: String,
         content_type: Option<String>,
         ttl: Option<u32>,
-        cache: CacheServiceTS,
+        cache: CacheTS,
     ) -> Result<impl warp::Reply, Infallible> {
         cache
             .lock()
