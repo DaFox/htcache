@@ -1,5 +1,7 @@
 # HTCache - Simple and fast cache with HTTP interface
 
+[![Rust](https://github.com/DaFox/htcache/actions/workflows/rust.yml/badge.svg)](https://github.com/DaFox/htcache/actions/workflows/rust.yml)
+
 ## Starting the service
 
 ```sh
